@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: telegram-vote-bot
+    name: telegram_vote_bot
     env: python
     plan: free
-    runtime: python
-    pythonVersion: 3.10.12
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    region: frankfurt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.4
