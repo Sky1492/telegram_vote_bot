@@ -2,25 +2,29 @@ import json
 import os
 import asyncio
 from datetime import datetime, timedelta
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils import executor
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import (
+    Message, ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+)
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
 import openpyxl
 
-API_TOKEN = "8213391771:AAFVwi2sk5F6sHB-nq0ehWPz9CnsObCPS7U"
-ADMIN_IDS = [568126852]  # додай інші ID за потреби
+API_TOKEN = "ТОКЕН_ТВОЕГО_БОТА"
+ADMIN_IDS = [568126852]
 
 DATA_FILE = "data/users.json"
 POLL_FILE = "data/polls.json"
 os.makedirs("data", exist_ok=True)
 
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
 users = {}
 polls = {}
 
-# --- Завантаження/збереження ---
+# ===== ФАЙЛЫ =====
 def load_users():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -44,13 +48,13 @@ def save_polls():
 users = load_users()
 polls = load_polls()
 
-# --- Таймер ---
+# ===== ТАЙМЕР =====
 async def poll_timer(poll_id, duration):
     await asyncio.sleep(duration)
     if poll_id in polls and polls[poll_id]["active"]:
         await finish_poll(poll_id, auto=True)
 
-# --- Завершення ---
+# ===== ЗАВЕРШЕНИЕ ГОЛОСОВАНИЯ =====
 async def finish_poll(poll_id, auto=False):
     poll = polls.get(poll_id)
     if not poll:
@@ -66,13 +70,11 @@ async def finish_poll(poll_id, auto=False):
     text = f"{'⏰ Час голосування вичерпано!' if auto else '🏁 Голосування завершено достроково!'}\n\n"
     text += f"📌 {poll['question']}\n\n"
 
-    # Підсумки по варіантах
     for opt in poll["options"]:
         count = results.get(opt, 0)
         percent = (count / total_votes * 100) if total_votes else 0
         text += f"{opt}: {count} голос(ів) ({percent:.1f}%)\n"
 
-    # Підсумки по будинках
     house_stats = {}
     for uid, choice in poll["votes"].items():
         user = users.get(str(uid), {})
@@ -91,9 +93,9 @@ async def finish_poll(poll_id, auto=False):
             except:
                 pass
 
-# --- /status ---
-@dp.message_handler(commands=["status"])
-async def poll_status(message: types.Message):
+# ===== КОМАНДЫ =====
+@dp.message(Command("status"))
+async def poll_status(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.answer("⛔ Лише адміністратор може переглядати результати.")
 
@@ -111,12 +113,10 @@ async def poll_status(message: types.Message):
             count = results.get(opt, 0)
             percent = (count / total_votes * 100) if total_votes else 0
             text += f"{opt}: {count} ({percent:.1f}%)\n"
-        text += "\n"
         await message.answer(text)
 
-# --- /stopvote ---
-@dp.message_handler(commands=["stopvote"])
-async def stop_vote(message: types.Message):
+@dp.message(Command("stopvote"))
+async def stop_vote(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.answer("⛔ Лише адміністратор може завершити голосування.")
 
@@ -132,34 +132,33 @@ async def stop_vote(message: types.Message):
         return await message.answer("❌ Немає активних голосувань.")
     await message.answer("Оберіть голосування для зупинки:", reply_markup=buttons)
 
-@dp.callback_query_handler(lambda c: c.data.startswith("stop_"))
-async def stop_poll_callback(call: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("stop_"))
+async def stop_poll_callback(call: CallbackQuery):
     poll_id = call.data.split("_", 1)[1]
     await finish_poll(poll_id, auto=False)
     await call.message.answer("✅ Голосування зупинено.")
 
-# --- Реєстрація ---
-@dp.message_handler(commands=["start"])
-async def start_cmd(message: types.Message):
+@dp.message(Command("start"))
+async def start_cmd(message: Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(KeyboardButton("Почати"))
     await message.answer("👋 Вітаємо у боті для голосувань!", reply_markup=kb)
 
-@dp.message_handler(lambda m: m.text == "Почати")
-async def agree(message: types.Message):
+@dp.message(F.text == "Почати")
+async def agree(message: Message):
     kb = ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add(KeyboardButton("📱 Надати номер телефону", request_contact=True))
     await message.answer("ℹ️ Надішліть свій номер телефону для підтвердження.", reply_markup=kb)
 
-@dp.message_handler(content_types=types.ContentType.CONTACT)
-async def get_contact(message: types.Message):
+@dp.message(F.content_type == "contact")
+async def get_contact(message: Message):
     uid = str(message.from_user.id)
     users[uid] = {"id": uid, "phone": message.contact.phone_number, "step": "fio"}
     save_users()
-    await message.answer("Введіть ПІБ, номер будинку та квартири (через кому):", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("Введіть ПІБ, номер будинку та квартири (через кому):", reply_markup=None)
 
-@dp.message_handler(lambda m: users.get(str(m.from_user.id), {}).get("step") == "fio")
-async def get_fio(message: types.Message):
+@dp.message(F.text.func(lambda text, m=None: users.get(str(m.from_user.id), {}).get("step") == "fio"))
+async def get_fio(message: Message):
     uid = str(message.from_user.id)
     parts = [p.strip() for p in message.text.split(",")]
     if len(parts) < 3:
@@ -168,9 +167,8 @@ async def get_fio(message: types.Message):
     save_users()
     await message.answer("✅ Ви зареєстровані!")
 
-# --- Нове голосування ---
-@dp.message_handler(commands=["newpoll"])
-async def create_poll(message: types.Message):
+@dp.message(Command("newpoll"))
+async def create_poll(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.answer("⛔ Лише адміністратор може створювати голосування.")
     poll_id = str(len(polls) + 1)
@@ -180,8 +178,8 @@ async def create_poll(message: types.Message):
     save_polls()
     await message.answer("🗳 Введіть питання:")
 
-@dp.message_handler(lambda m: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "question")
-async def poll_question(message: types.Message):
+@dp.message(F.text.func(lambda text, m=None: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "question"))
+async def poll_question(message: Message):
     poll_id = users["poll_step"]["id"]
     polls[poll_id]["question"] = message.text
     users["poll_step"]["stage"] = "options"
@@ -189,8 +187,8 @@ async def poll_question(message: types.Message):
     save_polls()
     await message.answer("✏ Введіть варіанти через кому:")
 
-@dp.message_handler(lambda m: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "options")
-async def poll_options(message: types.Message):
+@dp.message(F.text.func(lambda text, m=None: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "options"))
+async def poll_options(message: Message):
     poll_id = users["poll_step"]["id"]
     polls[poll_id]["options"] = [o.strip() for o in message.text.split(",") if o.strip()]
     users["poll_step"]["stage"] = "duration"
@@ -198,8 +196,8 @@ async def poll_options(message: types.Message):
     save_polls()
     await message.answer("⏱ Вкажіть тривалість у хвилинах:")
 
-@dp.message_handler(lambda m: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "duration")
-async def poll_duration(message: types.Message):
+@dp.message(F.text.func(lambda text, m=None: isinstance(users.get("poll_step"), dict) and users["poll_step"]["stage"] == "duration"))
+async def poll_duration(message: Message):
     try:
         minutes = int(message.text)
     except:
@@ -225,9 +223,8 @@ async def poll_duration(message: types.Message):
     asyncio.create_task(poll_timer(poll_id, minutes * 60))
     await message.answer("✅ Голосування створене!")
 
-# --- Голосування ---
-@dp.callback_query_handler(lambda c: c.data.startswith("vote_"))
-async def vote_handler(call: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("vote_"))
+async def vote_handler(call: CallbackQuery):
     _, poll_id, option = call.data.split("_", 2)
     poll = polls.get(poll_id)
     if not poll or not poll["active"] or datetime.now() > datetime.fromisoformat(poll["end_time"]):
@@ -237,7 +234,6 @@ async def vote_handler(call: types.CallbackQuery):
     if not user:
         return await call.answer("⛔ Ви не зареєстровані.", show_alert=True)
 
-    # Один голос з квартири
     for uid, choice in poll["votes"].items():
         if users.get(str(uid), {}).get("flat") == user.get("flat") and users.get(str(uid), {}).get("house") == user.get("house"):
             return await call.answer("⛔ З вашої квартири вже голосували.", show_alert=True)
@@ -246,9 +242,8 @@ async def vote_handler(call: types.CallbackQuery):
     save_polls()
     await call.answer(f"✅ Ви проголосували: {option}", show_alert=True)
 
-# --- Експорт ---
-@dp.message_handler(commands=["export"])
-async def export_results(message: types.Message):
+@dp.message(Command("export"))
+async def export_results(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return await message.answer("⛔ Лише адміністратор може експортувати.")
 
@@ -266,5 +261,9 @@ async def export_results(message: types.Message):
         wb.save(file_path)
         await message.answer_document(open(file_path, "rb"))
 
+# ===== ЗАПУСК =====
+async def main():
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
