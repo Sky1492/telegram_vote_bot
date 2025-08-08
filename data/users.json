@@ -1,0 +1,52 @@
+{
+  "891504290": {
+    "id": "891504290",
+    "phone": "380958064988",
+    "step": null,
+    "fio": "Скиба Андрій Володимирович",
+    "house": "8.3",
+    "flat": "136",
+    "doc_message_id": 49,
+    "approved": true
+  },
+  "568126852": {
+    "id": "568126852",
+    "phone": "380966281997",
+    "step": null,
+    "fio": "Админ",
+    "house": "8.3",
+    "flat": "136",
+    "doc_message_id": 59,
+    "approved": true
+  },
+  "446554843": {
+    "id": "446554843",
+    "phone": "380954243760",
+    "step": null,
+    "fio": "Скиба Ганна Ігорівна",
+    "house": "8.3",
+    "flat": "136",
+    "doc_message_id": 79,
+    "approved": true
+  },
+  "poll_question": "Квіти",
+  "poll_options": [
+    "Роза",
+    "ромашка"
+  ],
+  "421976049": {
+    "id": "421976049",
+    "phone": "380633274079",
+    "step": "fio"
+  },
+  "127802080": {
+    "id": "127802080",
+    "phone": "380937512987",
+    "step": null,
+    "fio": "Бунке",
+    "house": "8.3",
+    "flat": "106",
+    "doc_message_id": 256,
+    "approved": true
+  }
+}
